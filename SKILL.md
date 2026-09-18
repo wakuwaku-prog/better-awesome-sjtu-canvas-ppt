@@ -1,5 +1,5 @@
 ---
-name: sjtu-canvas-ppt
+name: better-awesome-sjtu-canvas-ppt
 description: >
   提取上海交通大学课堂实录回放（Canvas / 视频空间）中的课件、音轨与字幕。
   两条证据链：① 平台 PPT 轨（opencli 注入 XHR+fetch 拦截器捕获后端 API，
