@@ -299,16 +299,58 @@ opencli browser sjtu eval "fetch('/jy-application-resourcemanage/v1/course/ai/tr
 | 后台 `curl` 下载卡在 0 字节 | 本环境 background job 下的已知问题 | 改前台下载并给足超时 |
 | 两节内容重复/错位 | 把两节当一节处理 | 每节独立抓取、独立命名、独立转写 |
 
-## 归档与登记约定（配合 Obsidian 知识库）
+## 从素材到笔记（Obsidian 整理）
+
+抓取只完成前半程。**完整流程见 [docs/OBSIDIAN-NOTES.md](docs/OBSIDIAN-NOTES.md)**，
+三份骨架模板见 [`templates/`](templates/)（P## 课件总览 / V## 录像时间线 / L## 课堂笔记）。
+
+### 三件套分工
+
+| 笔记 | 回答什么 | 图片宽度 |
+|---|---|---|
+| **P0X 课件总览** | 这一页讲了什么？ | **760**，一页一节，含放映时间与页码校验 |
+| **V0X 录像时间线** | 什么时候讲的什么？ | **300**，2 列图片廊 + 逐段时间线 + 口径差异表 |
+| **L0X 课堂笔记** | 我该记住什么？ | **520–560**，按主题重排，含术语表、回忆题、待核实 |
+
+三篇互相链接，并至少链回课程主页与一个概念页。
+
+### 三条硬规则
+
+1. **图片必须内嵌**，不要只放链接：`![[09 参考资料/附件/L0X 课件 PPT/第N节/PPT p## — Topic (第N节 MMSS).jpg|760]]`
+2. **表格内嵌图片必须转义竖线**：写成 `![[…jpg\|300]]`，否则表格结构会被破坏。
+   > 这一条很容易漏——已生成的 `V01` 就有 17 行表格图片未转义，表格渲染是坏的，后来用
+   > `scripts/check_note_structure.py` 查出来才修好。
+3. **页码读不出来就标「待核实」**，不要猜：页脚重复 → 文件名 `p##dup`；页脚缺失 → `pNA`；
+   独立章节重新编号 → `C01` 之类前缀。三种情况都要在「待核实」里列条。
+
+### 正文三段式（不要把理解写成事实）
+
+```
+**资料事实 Source facts：**        ← 只写课件真实出现的文字/图示/页脚结论
+**课堂补充 Teacher's additions（第N节 MM:SS）：**   ← 老师口头内容，带时间码
+**我的理解 My interpretation：**   ← 自己的推断，明确标为理解
+```
+
+### 归档与登记
 
 - 课件图片：`09 参考资料/附件/L0X 课件 PPT/第N节/`
 - 视频 / 音轨 / 字幕：`09 参考资料/附件/L0X 课堂视频|音轨|字幕/`
 - 大体积 mp4/wav **加进 `.gitignore`**（GitHub 单文件 100 MB 上限，且可由平台重新获取）；
   转写文本与课件 jpg 属于知识库内容，照常入库。
 - 提供 **provenance 文件**：场景抽取清单（时间码 + 页码读数）与画面 OCR 文本一并归档。
-- 登录 `09 参考资料/Source Register.md`，并在 `01 课程资料/` 生成 `P## — 课件总览` 页面，
-  笔记中用 `![[路径|宽度]]` **内嵌**图片，不要只放链接。
-- 生成后用 `scripts/check_vault_links.py <vault>` 校验全库 wikilink / 嵌入可解析。
+- 登录 `09 参考资料/Source Register.md`（每类材料一行，页码异常也要登记）。
+- 文件名**不要用方括号 `[ ]`**——会破坏 Obsidian 的 wikilink 与嵌入语法，统一用圆括号。
+
+### 收尾自查
+
+```bash
+python scripts/check_vault_links.py "<vault root>"       # 所有 wikilink / 嵌入能否解析
+python scripts/check_note_structure.py "<vault root>"    # 笔记结构是否符合库约定
+```
+
+`check_vault_links.py` 会把「索引页预留的骨架链接」与「目录级链接」也报为未解析，这两类允许。
+`check_note_structure.py` 检查 frontmatter、来源位置、图片是否内嵌、表格竖线是否转义、
+中文总结、回忆题数量、待核实清单、孤岛页——**不检查内容对错**，只检查形状。
 
 ## 脚本清单
 
@@ -324,6 +366,7 @@ opencli browser sjtu eval "fetch('/jy-application-resourcemanage/v1/course/ai/tr
 | `transcribe_class.py` | 分段转写 + 逐段判定 zh/en/mixed（`.md/.json/.srt`） |
 | `diarize_transcript.py` | WavLM 声纹嵌入 + 聚类，输出说话人版本 |
 | `check_vault_links.py` | 校验 Obsidian 库中 wikilink 与 `![[…]]` 嵌入是否都能解析 |
+| `check_note_structure.py` | 校验笔记结构是否符合库约定（frontmatter / 内嵌 / 转义 / 回忆题 / 待核实） |
 
 ## 耗时参考（RTX 4060）
 
