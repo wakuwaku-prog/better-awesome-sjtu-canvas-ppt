@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local.dsh/lecture-to-obsidian/vault-profile.schema.json",
+  "title": "lecture-to-obsidian 知识库画像 vault profile",
+  "description": "目标 Obsidian 库的差异单点配置。由 scripts/build_vault_profile.py 从目标库 AGENTS.md 与目录实况生成，人工复核后冻结。冲突时以目标库 AGENTS.md 为准。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "vault", "dirs", "mediaPolicy"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+
+    "vault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "name"],
+      "properties": {
+        "root": { "type": "string", "description": "知识库根目录（绝对路径）" },
+        "name": { "type": "string" },
+        "courseCode": { "type": ["string", "null"] },
+        "courseName": { "type": ["string", "null"] },
+        "agentsMd": { "type": ["string", "null"], "description": "相对根的 AGENTS.md 路径；本 skill 的第一读" },
+        "shared": { "type": "boolean", "description": "是否为多人共享仓库" },
+        "generatedAt": { "type": "string" },
+        "reviewedByHuman": { "type": "boolean", "description": "画像是否已人工复核。false 时只允许只读操作" }
+      }
+    },
+
+    "dirs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lecture"],
+      "description": "各产物目录，相对知识库根。null 表示该库不使用该产物。",
+      "properties": {
+        "lecture": { "type": "string", "description": "L## 课堂笔记" },
+        "deck": { "type": ["string", "null"], "description": "P## 课件逐页索引" },
+        "timeline": { "type": ["string", "null"], "description": "V## 回放时间线；细胞库不默认创建" },
+        "concept": { "type": ["string", "null"], "description": "Concept — 概念页" },
+        "method": { "type": ["string", "null"] },
+        "disorder": { "type": ["string", "null"] },
+        "assessment": { "type": ["string", "null"], "description": "复习与考核" },
+        "explainer": { "type": ["string", "null"], "description": "讲解产物落点，如 10 讲解 HTML / 05 讲解稿" },
+        "quizBank": { "type": ["string", "null"], "description": "题库 JSON 落点，如 刷题工具/题库" },
+        "attachments": { "type": "string", "description": "长期附件根" },
+        "sourceRegister": { "type": ["string", "null"] },
+        "templates": { "type": ["string", "null"] },
+        "scratch": { "type": ["string", "null"], "description": "临时工作目录（如 _scripts / _待整理）" },
+        "excluded": { "type": "array", "items": { "type": "string" }, "description": "不进入共享范围的目录（如 07 课程任务）" }
+      }
+    },
+
+    "naming": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lecture": { "type": "string", "description": "如 L## — 中文主题 English Topic" },
+        "deck": { "type": ["string", "null"] },
+        "timeline": { "type": ["string", "null"] },
+        "concept": { "type": ["string", "null"] },
+        "forbiddenChars": { "type": "array", "items": { "type": "string" }, "description": "如 [ ] ——方括号会破坏 wikilink 与嵌入语法" }
+      }
+    },
+
+    "frontmatter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" }, "description": "必填字段名（按目标库实际写法，如 type 或 note_type）。**应取各笔记类型的交集**（每篇都有的字段），不要用「出现频次前 N 项」——实测这样会得到 12 个全局必填字段（含 title/lecture/concept/lecture_date/source_location），而任何单篇笔记都满足不了，14 篇笔记直接报 23 个 ERROR。" },
+        "requiredIsInferred": { "type": "boolean", "description": "`required` 是从目录频次**推断**的（AGENTS.md 未逐字列出）。**推断出来的要求不是要求**：`reviewedByHuman=false` 且本字段为 true 时，校验器不得据此报 ERROR，只能报 WARN/INFO 并说明「画像未经人工复核」。" },
+        "requiredPerNoteType": { "type": "object", "description": "按笔记类型的必填字段（键是 frontmatter 类型字段的取值，如 lecture-note / ppt-note / concept）。这才是「必填」的正确粒度：L 笔记要 lecture_id，P 笔记要 deck，Concept 要 concept。", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
+        "optional": { "type": "array", "items": { "type": "string" } },
+        "perNoteType": { "type": "object", "description": "**信息性**：该类型笔记里**出现过**的可选字段（各类型字段集的并集）。**它不是必填清单，校验器不得据此报缺字段。** 实测撞车过一次：心理库 `perNoteType[lecture-note]` 有 12 个字段（并集），被当成必填后，9 篇 L 笔记各报缺 7–9 个字段——每篇都满足不了。要表达必填请用 `requiredPerNoteType`。", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
+        "statusEnum": { "type": ["array", "null"], "items": { "type": "string" }, "description": "实测 status 取值集合。null = 无固定枚举" }
+      }
+    },
+
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "结构要求的画像驱动配置。**必须存在**，否则复用校验器的硬编码启发式会大面积误报——已实测：心理库 14 篇笔记被报 22 个问题，其中多数是因为复用校验器只认固定小节名、且对 P 页面也要求主动回忆题，而 P 页面是课件逐页索引、本来就没有回忆题。",
+      "properties": {
+        "summarySectionAliases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "「中文总结」小节的候选标题。各库写法不同：心理库用编号小节（`## 一、…`），细胞库用「中文总结 / Chinese synthesis」。"
+        },
+        "summaryDetection": {
+          "enum": ["heading-alias", "any-numbered-heading", "not-required"],
+          "description": "如何认定「有中文总结」：heading-alias=匹配 summarySectionAliases；any-numbered-heading=只要存在编号二级标题即算（心理库实际形态）；not-required=不作要求"
+        },
+        "recallQuestions": {
+          "type": "object",
+          "description": "各类笔记**最少**主动回忆题数。键是笔记类型（取画像 frontmatter 类型字段的取值，如 type/note_type；L/P/V 用编号前缀判定）。**P 页面必须为 0**——课件逐页索引不含回忆题。",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "requireToVerifyList": {
+          "type": "object",
+          "description": "各类笔记是否必须有「待核实」小节",
+          "additionalProperties": { "type": "boolean" }
+        },
+        "requireUncheckedToVerifyItem": {
+          "type": "object",
+          "description": "「待核实」里是否必须至少有一条未勾选的 `- [ ]`",
+          "additionalProperties": { "type": "boolean" }
+        },
+        "demoteReusedFindings": {
+          "type": "array",
+          "items": { "enum": ["summary", "recall", "to-verify", "frontmatter"] },
+          "description": "复用 check_note_structure.py 的哪些发现类别，经画像复核后降级为 INFO。**降级不等于忽略**：输出必须写明「复用校验器硬编码，已按画像复核」。只列有明确映射的类别——**不设 `other`**：一个接受值却不产生任何效果的配置项，会让人以为它生效了。"
+        }
+      }
+    },
+
+    "mediaPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archiveVideo", "archiveAudio", "archiveTranscript"],
+      "description": "决定 manifest.media.archived 与转写产物是否入库。细胞库三者分别为 false/false/false。",
+      "properties": {
+        "archiveVideo": { "type": "boolean" },
+        "archiveAudio": { "type": "boolean" },
+        "archiveTranscript": { "type": "boolean" },
+        "archiveSlideImages": { "type": "boolean" },
+        "registerDeletedMedia": { "type": "boolean", "description": "媒体已清理时是否仍在 Source Register 留一行（不留失效链接）" },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "embedSyntax": { "type": "string", "description": "模板，如 ![[{path}|{width}]]" },
+        "lectureWidth": { "type": ["integer", "null"], "description": "如 520–560" },
+        "deckWidth": { "type": ["integer", "null"], "description": "如 760" },
+        "timelineWidth": { "type": ["integer", "null"], "description": "如 300" },
+        "escapePipeInTables": { "type": "boolean", "description": "恒为 true——表格内嵌图片必须写 \\|" },
+        "preferEmbeddedPageImage": { "type": "boolean", "description": "true = 默认内嵌页图；false = 用 ![[pdf#page=N]]。心理库实测 #page= 点击无效，故默认 true" }
+      }
+    },
+
+    "callouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slideBlock": { "type": "string", "description": "课件页图块，必须展开，如 [!example]+" },
+        "mustRemember": { "type": ["string", "null"], "description": "如 [!important]" },
+        "toVerify": { "type": ["string", "null"], "description": "如 [!warning] 或 [!note]" },
+        "myInterpretation": { "type": ["string", "null"], "description": "如 [!tip]" },
+        "quizAnswer": { "type": ["string", "null"], "description": "如 [!success]-（带 - 表示默认折叠）" },
+        "abstract": { "type": ["string", "null"], "description": "如 [!abstract] 本节主线 / 怎么用这份稿" }
+      }
+    },
+
+    "evidenceTags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "该库使用的证据标记集，如 [PPT原文] [课堂口述] [机器转写] [我的推断] [待核实]"
+    },
+
+    "explainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "enum": ["single-file-html", "chapter-html", "markdown-only", "none"] },
+        "outDir": { "type": ["string", "null"] },
+        "imageMaxEdgePx": { "type": ["integer", "null"], "description": "内嵌前等比缩小长边，如 1600 / 1200 / 1100" },
+        "maxBytes": { "type": ["integer", "null"], "description": "单文件体积上限，如 4194304 (4 MB)" },
+        "imageWidthAttr": { "type": ["string", "null"], "description": "如 max-width:min(720px,100%)——不要写死 px，窄屏会顶破卡片" },
+        "dshUiFencesPerTurn": { "type": ["integer", "null"], "description": "对话讲解中组件围栏数量上限，如 3–8" }
+      }
+    },
+
+    "quiz": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bankEnabled": { "type": "boolean" },
+        "bankSchemaVersion": { "const": 1 },
+        "outDir": { "type": ["string", "null"] },
+        "questionsPerSet": { "type": ["integer", "null"], "description": "对话/每组题量，如 5–8" },
+        "correctOptionMustNotBeLongest": { "const": true, "description": "硬规则，不可关闭" },
+        "shuffleAnswerPositions": { "const": true },
+        "explanationsCiteSource": { "const": true, "description": "解析必须指回课件页码或原文" }
+      }
+    },
+
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shared": { "type": "boolean" },
+        "requireStatusBeforeEdit": { "type": "boolean" },
+        "requireFetchBeforeEdit": { "type": "boolean" },
+        "pullOnlyWhenClean": { "const": true },
+        "stageOnlyTargetFiles": { "const": true },
+        "forbidden": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

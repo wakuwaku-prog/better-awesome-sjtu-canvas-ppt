@@ -1,22 +1,36 @@
 ---
 name: better-awesome-sjtu-canvas-ppt
 description: >
-  提取上海交通大学课堂实录回放（Canvas / 视频空间）中的课件、音轨与字幕。
-  两条证据链：① 平台 PPT 轨（opencli 注入 XHR+fetch 拦截器捕获后端 API，
-  下载 S3 课件图 + 时间码）；② 平台没有 PPT 轨或播放器改版时，从视频/音轨
-  重建——屏幕轨场景抽取课件画面、逐页 OCR、页脚页码校验，Whisper 分段转写
-  并做说话人分离。
+  上海交通大学课堂实录回放（Canvas / 视频空间）→ Obsidian 知识库的**前半程**：
+  ① 提取课件、音轨、字幕（平台 PPT 轨 / 从视频重建两条证据链）；
+  ② 把素材整理成可复习的笔记（知识库画像 → manifest 契约 → L## 课堂笔记 /
+  P## 课件逐页索引 / V## 时间线 / Concept 概念页）。
+  AI 讲解与课后考题属后半程，见 skill `lecture-to-obsidian`。
   当用户提到"交大Canvas PPT"、"上海交大课程回放"、"SJTU视频课件"、
   "交大视频PPT提取"、"导出PPT"、"下载课件"、"课堂实录"、"回放字幕"、
+  "整理到 Obsidian"、"生成课堂笔记"、"课件逐页索引"、"知识库画像"、
   "/ivsModules/index"、"play-center"、sjtu.edu.cn / v.sjtu.edu.cn 回放页面时使用。
   使用前提醒用户：1) 提前在浏览器登录 SJTU（oc.sjtu.edu.cn / v.sjtu.edu.cn）；
   2) opencli doctor 全绿，扩展未连接时先 opencli daemon restart。
 ---
 
-# SJTU 课堂实录提取（课件 / 音轨 / 字幕）
+# SJTU 课堂实录 → Obsidian（提取 + 笔记）
 
-从上海交通大学课堂实录回放中提取**课件图片、音轨和字幕**，按节次分文件夹保存，
-图片以视频时间码命名，便于与笔记中的时间线互相核对。
+本 skill 负责**前半程**：从课堂实录回放提取**课件图片 / 音轨 / 字幕**（已有能力），
+再把素材整理成**能在 Obsidian 里复习的笔记**。后半程——AI 讲解（md 真源 + 单文件 HTML）、
+课后考题（三形态同源）、跨层质量门——在同机的 skill `lecture-to-obsidian`。
+
+```
+平台回放 ──► adapters/ ──► raw/ ──► build_manifest.py ──► manifest.json   ← 冻结契约
+                                                              │
+库根 AGENTS.md ──► build_vault_profile.py ──► vault-profile.json ← 冻结契约
+                                                              ▼
+                                    gen_notes.py ──► L## / P## / V## / Concept
+                                                     + 索引 + Source Register 行
+```
+
+**两份契约**：`schemas/manifest.schema.json`（素材清单）、`schemas/vault-profile.schema.json`
+（知识库画像）。层间只通过这些文件传递，下游（含 `lecture-to-obsidian`）只认契约。
 
 一节完整的课在平台上通常被拆成**两个节次**（例如 `第1周 - 周四 第9节` 15:55、
 `第1周 - 周四 第10节` 16:50）。**两节要一起抓，并分别标注，不要合并成一份材料。**
@@ -301,35 +315,74 @@ opencli browser sjtu eval "fetch('/jy-application-resourcemanage/v1/course/ai/tr
 
 ## 从素材到笔记（Obsidian 整理）
 
-抓取只完成前半程。**完整流程见 [docs/OBSIDIAN-NOTES.md](docs/OBSIDIAN-NOTES.md)**，
-三份骨架模板见 [`templates/`](templates/)（P## 课件总览 / V## 录像时间线 / L## 课堂笔记）。
+抓取只完成前半程。这一段把「素材已落在附件目录」变成「库里出现能用的笔记」。
+**完整规范见 [`docs/OBSIDIAN-NOTES.md`](docs/OBSIDIAN-NOTES.md)**；素材清单契约见
+[`schemas/manifest.schema.json`](schemas/manifest.schema.json)，画像契约见
+[`schemas/vault-profile.schema.json`](schemas/vault-profile.schema.json)。
 
-### 三件套分工
+### 第 ① 步（永远第一步）：知识库画像
 
-| 笔记 | 回答什么 | 图片宽度 |
+```bash
+python scripts/build_vault_profile.py "<vault root>" \
+       -o "<vault root>/_scripts/vault-profile.json" --validate
+```
+
+画像把目标库的差异（frontmatter 键名、必填字段、图片宽度、callout 形式、目录映射、
+Git 严格度、讲解/题库落点）变成一份 JSON。**画像没生成成功就不要往下走。**
+产出恒为 `reviewedByHuman: false`——人工复核前 `gen_notes.py --apply` 会自动降级为 dry-run。
+
+### 第 ② 步：素材清单
+
+```bash
+python scripts/build_manifest.py "<work dir>"        # raw/ → manifest.json
+```
+
+`manifest.json` 是采集层的**唯一出口**，下游只认它。raw/ 契约见
+[`docs/ACQUISITION.md`](docs/ACQUISITION.md)。
+
+### 第 ③ 步：生成笔记
+
+```bash
+python scripts/gen_notes.py --manifest <manifest.json> --vault "<vault root>" \
+       [--profile <画像>] [--out-dir <tmp>] [--with-timeline] [--with-concept TERM]
+# 默认 dry-run；确认形状后加 --apply（会先跑 Git 门）
+```
+
+| 笔记 | 回答什么 | 默认建 |
 |---|---|---|
-| **P0X 课件总览** | 这一页讲了什么？ | **760**，一页一节，含放映时间与页码校验 |
-| **V0X 录像时间线** | 什么时候讲的什么？ | **300**，2 列图片廊 + 逐段时间线 + 口径差异表 |
-| **L0X 课堂笔记** | 我该记住什么？ | **520–560**，按主题重排，含术语表、回忆题、待核实 |
+| **P0X 课件总览** | 这一页讲了什么？ | 是（一页一节，含放映时间与页码校验） |
+| **L0X 课堂笔记** | 我该记住什么？ | 是（按主题重排，含回忆题、待核实） |
+| **V0X 录像时间线** | 什么时候讲的什么？ | **否**（只有 `--with-timeline` 才建） |
+| **Concept — 术语** | 这个概念是什么？ | 按需（`--with-concept TERM`） |
 
-三篇互相链接，并至少链回课程主页与一个概念页。
+> **V## 默认不建**：原版主张每课都建三件套，但心理库 `AGENTS.md` §9 明确
+> 「`V##` 仅在需要回放复核时建立，不把时间线当默认学习主线」。三库实测都要求按需。
 
-### 三条硬规则
+### 笔记层的五条硬规则
 
-1. **图片必须内嵌**，不要只放链接：`![[09 参考资料/附件/L0X 课件 PPT/第N节/PPT p## — Topic (第N节 MMSS).jpg|760]]`
-2. **表格内嵌图片必须转义竖线**：写成 `![[…jpg\|300]]`，否则表格结构会被破坏。
-   > 这一条很容易漏——已生成的 `V01` 就有 17 行表格图片未转义，表格渲染是坏的，后来用
-   > `scripts/check_note_structure.py` 查出来才修好。
-3. **页码读不出来就标「待核实」**，不要猜：页脚重复 → 文件名 `p##dup`；页脚缺失 → `pNA`；
-   独立章节重新编号 → `C01` 之类前缀。三种情况都要在「待核实」里列条。
+1. **页图块必须展开**：用 `[!example]+`，**永远不要 `[!example]-`**——
+   折叠会让图默认不可见（有机化学库实测 72/72 篇打开时可见图数为 0）。
+2. **表格内嵌图必须转义竖线**：写成 `![[…jpg\|300]]`，否则表格结构会被破坏。
+   > 这一条很容易漏——已生成的 `V01` 就有 17 行表格图片未转义，表格渲染是坏的，
+   > 后来用 `scripts/check_note_structure.py` 查出来才修好。
+3. **默认内嵌页图，不用 `#page=`**：心理库实测该链接点击无效（96 处文本链接不在此列）。
+4. **页码读不出来就标「待核实」**，文件名用 `pNA` / `p##dup` / `C01`，不猜。
+5. **页脚不一定是页码**：心理库 L08 的 p26–p31 与 p33 页脚都是 10（那是小节号）。
+   引用一律以 **PDF 阅读页**为准；`pageNoScope` 记录到底是 `section` 还是 `page`。
 
-### 正文三段式（不要把理解写成事实）
+### 证据分层：以目标库为准
+
+原版给的是三段式：
 
 ```
 **资料事实 Source facts：**        ← 只写课件真实出现的文字/图示/页脚结论
 **课堂补充 Teacher's additions（第N节 MM:SS）：**   ← 老师口头内容，带时间码
 **我的理解 My interpretation：**   ← 自己的推断，明确标为理解
 ```
+
+**但不是所有库都这么写。** 心理库 `AGENTS.md` §4 要的是六类标记：
+`[PPT原文]` `[课堂口述]` `[机器转写]` `[我的推断]` `[背景补充，非课件原文]` `[待核实]`。
+**以画像 `evidenceTags` 为准**；抽不到时回调三段式并写 warning。
 
 ### 归档与登记
 
@@ -338,19 +391,29 @@ opencli browser sjtu eval "fetch('/jy-application-resourcemanage/v1/course/ai/tr
 - 大体积 mp4/wav **加进 `.gitignore`**（GitHub 单文件 100 MB 上限，且可由平台重新获取）；
   转写文本与课件 jpg 属于知识库内容，照常入库。
 - 提供 **provenance 文件**：场景抽取清单（时间码 + 页码读数）与画面 OCR 文本一并归档。
-- 登录 `09 参考资料/Source Register.md`（每类材料一行，页码异常也要登记）。
+- 登录 `09 参考资料/Source Register.md`（每类材料一行，**页码异常也要登记**）。
 - 文件名**不要用方括号 `[ ]`**——会破坏 Obsidian 的 wikilink 与嵌入语法，统一用圆括号。
 
 ### 收尾自查
 
 ```bash
-python scripts/check_vault_links.py "<vault root>"       # 所有 wikilink / 嵌入能否解析
+python scripts/check_vault_links.py "<vault root>"       # wikilink / 嵌入能否解析
 python scripts/check_note_structure.py "<vault root>"    # 笔记结构是否符合库约定
+python scripts/check_note_frontmatter.py --profile <画像> --vault "<vault root>"  # 画像驱动必填与结构
+python scripts/check_vault_profile.py <画像>             # 画像声明的路径是否真实存在
+python scripts/check_manifest.py <manifest.json>         # 素材清单自洽
 ```
 
-`check_vault_links.py` 会把「索引页预留的骨架链接」与「目录级链接」也报为未解析，这两类允许。
-`check_note_structure.py` 检查 frontmatter、来源位置、图片是否内嵌、表格竖线是否转义、
-中文总结、回忆题数量、待核实清单、孤岛页——**不检查内容对错**，只检查形状。
+> ⚠️ `check_vault_links.py` 与 `check_note_structure.py` **永远 `exit 0`**，只能解析 stdout；
+> 前者对**不存在的库路径**会静默报 OK（`checked 0` + `OK: every wikilink…`），
+> 后者把 frontmatter 字段名硬编码为 `type`（用 `note_type` 的库会全库误报）。
+> 真正的必填校验靠**画像驱动**的 `check_note_frontmatter.py`。
+
+### 下一步
+
+AI 讲解（md 真源 + 单文件 HTML）与课后考题（对话卷子 / md 折叠答案 / 题库 JSON v1）
+属 skill `lecture-to-obsidian`——它读本 skill 产出的 `manifest.json` 与
+`vault-profile.json`，不重复采集与笔记逻辑。
 
 ## 脚本清单
 
@@ -367,6 +430,20 @@ python scripts/check_note_structure.py "<vault root>"    # 笔记结构是否符
 | `diarize_transcript.py` | WavLM 声纹嵌入 + 聚类，输出说话人版本 |
 | `check_vault_links.py` | 校验 Obsidian 库中 wikilink 与 `![[…]]` 嵌入是否都能解析 |
 | `check_note_structure.py` | 校验笔记结构是否符合库约定（frontmatter / 内嵌 / 转义 / 回忆题 / 待核实） |
+
+适配器在 [`adapters/`](adapters/)：`canvas.py`（Canvas 双路径）、`chaoxing.py`（超星学习通）、
+`pdf.py`（教师 PDF 渲染页图）、`_common.py`（三方共用的凭据护栏 / 契约枚举 / 原子写 / 下载器）。
+
+### 笔记层（本 skill 的后半程）
+
+| 脚本 | 用途 |
+|---|---|
+| `build_vault_profile.py` | 读库根 `AGENTS.md` + 扫目录实况 → `vault-profile.json`（画像契约） |
+| `build_manifest.py` | `raw/`（采集产物）→ `manifest.json`（素材清单契约），两层校验 |
+| `gen_notes.py` | manifest + 画像 → L## / P## / V## / Concept + 索引 + Source Register 待插入行 |
+| `check_manifest.py` | 校验 manifest 自洽性（页序、时间码、页码三态、两条证据链不猜对齐） |
+| `check_note_frontmatter.py` | **画像驱动**的必填字段与结构要求检查（推断值只报 WARN） |
+| `check_vault_profile.py` | 校验画像声明的路径真实存在 |
 
 ## 耗时参考（RTX 4060）
 

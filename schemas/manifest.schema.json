@@ -1,0 +1,258 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local.dsh/lecture-to-obsidian/manifest.schema.json",
+  "title": "lecture-to-obsidian 素材清单 manifest",
+  "description": "采集层（L0/L1）的唯一出口。下游所有层只读这份文件，不解析平台原始响应。v1 的五处设计全部由心理与精神健康 L08 的真实素材反推得出，不是先验假设：① 一节课可对应多个平台节次（L08 = 第15节 + 第16节）；② 同一页可在多个节次放映、也可在同一节次重放（p9 两节都放映；p29/p31 各重放一次）；③ 课件页脚是**小节编号而非唯一页码**，重复是正常的（p26–p31 与 p33 都是 10），只有明显偏离相邻序列才算异常（p24 = 42，前后页 08/09）；④ 平台课件轨是**屏幕快照轨**，含教师桌面与 PowerPoint 编辑窗口，不是干净原图（两节 131 条快照 vs 35 页）；⑤ 教师 PDF 可能是**选页**而非课件全部（S84 的 p35 之后课堂还放了两页）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "slides", "warnings"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "course", "capturedAt", "sessions"],
+      "properties": {
+        "platform": {
+          "enum": ["canvas", "chaoxing", "pdf", "unknown"],
+          "description": "采集适配器标识。pdf = 只有教师 PDF，无回放。"
+        },
+        "course": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name"],
+          "properties": {
+            "id": { "type": "string", "description": "平台课程 id。canvas=Canvas courseId；chaoxing=courseid。取不到时写 \"unknown\" 并在 warnings 里说明，**不要编**" },
+            "name": { "type": "string" },
+            "code": { "type": "string", "description": "课程代码，如 HLT3202G" },
+            "extra": { "type": "object", "description": "平台专属字段，如 chaoxing 的 clazzid / teclId" }
+          }
+        },
+        "capturedAt": { "type": "string", "description": "ISO 8601 采集时间" },
+        "platformSubtitles": {
+          "enum": ["available", "unusable", "none"],
+          "description": "available=可作交叉校验；unusable=接口在但质量差；none=无此接口"
+        },
+
+        "sessions": {
+          "type": "array",
+          "description": "一节课常被平台拆成 2 个节次。**分别登记、分别采集、不合并**：lectureId 相同，partOfSplit 不同。pdf-only 来源可为空数组，但此时 pdf 必须非空。数组下标 +1 即 slides[].projections[].sessionIndex。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label"],
+            "properties": {
+              "label": { "type": "string", "description": "人类可读节次标签，如「L08 第15节 1355」" },
+              "lectureId": { "type": ["string", "null"], "description": "课程 L 编号，如 L08。未确认时为 null——**不要把平台节次号当 L 编号**" },
+              "platformSessionId": { "type": ["string", "null"], "description": "平台侧 courseId / knowledgeid" },
+              "letiNumber": { "type": ["integer", "null"], "description": "节次号（Canvas）" },
+              "beginTime": { "type": ["string", "null"], "description": "ISO 8601 带时区" },
+              "classDate": { "type": ["string", "null"], "description": "课堂日期 YYYY-MM-DD。**与材料接收日期区分**" },
+              "partOfSplit": { "type": ["integer", "null"], "description": "一节课拆成多段时，这是第几段（1-based）" },
+              "durationSec": { "type": "number", "minimum": 0 },
+              "usedDeck": { "type": ["string", "null"], "description": "该节次实际使用的课件文件名。L08 第15节前 35 分钟用的是 `第9次课.pptx`（**尚未归档**），与 S84 的 `第8次课.pdf` 不是同一份" },
+              "deckCoverageNote": { "type": ["string", "null"], "description": "如「0:00–35:07 未使用 S84」" },
+
+              "media": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "description": "原始媒体。多数知识库政策为「临时处理输入、处理后清理」，故 archived 常为 false。",
+                "properties": {
+                  "videoPath": { "type": ["string", "null"] },
+                  "videoSha256": { "type": ["string", "null"] },
+                  "videoBytes": { "type": "integer", "minimum": 0 },
+                  "audioPath": { "type": ["string", "null"] },
+                  "recordVariant": { "type": ["string", "null"], "description": "如 canvas 的 record5（小文件，收音相同）" },
+                  "archived": { "type": "boolean", "description": "是否长期归档。**必须服从目标库画像的 mediaPolicy**" },
+                  "cleanedUpAt": { "type": ["string", "null"] },
+                  "note": { "type": ["string", "null"], "description": "如「原始 MP4 未随仓库提交，需从平台重新获取」" }
+                }
+              },
+
+              "transcript": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": {
+                  "file": { "type": ["string", "null"] },
+                  "model": { "type": ["string", "null"] },
+                  "chunkSec": { "type": "integer", "minimum": 0 },
+                  "segmentCount": { "type": "integer", "minimum": 0 },
+                  "segments": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["startSec", "endSec", "text"],
+                      "properties": {
+                        "startSec": { "type": "number", "minimum": 0 },
+                        "endSec": { "type": "number", "minimum": 0 },
+                        "lang": { "enum": ["zh", "en", "mixed", "unknown"] },
+                        "text": { "type": "string" },
+                        "speaker": { "type": ["string", "null"], "description": "自动分离标签；引用前必须核对时间戳" }
+                      }
+                    }
+                  },
+                  "diarized": { "type": "boolean" },
+                  "speakerLabelsAreInferred": { "type": "boolean", "description": "恒为 true——自动说话人标签是推断，不是身份" },
+                  "knownMishearings": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "已知误听，如 declarative→decorative。**这些词不能作为逐字教师引语**"
+                  },
+                  "qualityNote": { "type": ["string", "null"] }
+                }
+              },
+
+              "platformArtifacts": {
+                "type": "array",
+                "description": "平台自带的 AI 产物。**只作交叉校验，不直接引用**——中英混排识别质量通常低于本地转写。",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "file"],
+                  "properties": {
+                    "kind": { "enum": ["ai-summary", "platform-asr", "ppt-track-manifest", "other"] },
+                    "file": { "type": "string" },
+                    "note": { "type": ["string", "null"], "description": "如「imageSeekTime 单位为秒」" },
+                    "recordCount": { "type": "integer", "minimum": 0, "description": "ppt-track-manifest 的记录数。实测 L08 两节 68 / 63 条，而 S84 仅 35 页" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "slides": {
+      "type": "array",
+      "description": "课件页图。来源可以是平台屏幕快照轨、视频场景抽取、关键帧抽取、或 PDF 渲染页图。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "file", "source"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 1, "description": "清单内序号（1-based），必须连续" },
+          "file": { "type": "string", "description": "归档文件路径，相对知识库根或绝对" },
+          "source": {
+            "enum": ["platform-ppt-track", "scene-extract", "keyframe-extract", "pdf-render"],
+            "description": "**platform-ppt-track 实测是屏幕快照轨**：含教师桌面、PowerPoint 编辑窗口，且必然有动画重复帧，去重与过滤是必需的"
+          },
+          "pdfPage": { "type": ["integer", "null"], "description": "对应 PDF 阅读器页序。**不是幻灯片印刷页码**" },
+
+          "projections": {
+            "type": "array",
+            "description": "该页在课堂上的放映记录。**可以是 0、1 或多条**：同一页可在两个节次都放映（L08 p9），也可在同一节次重放（L08 p29 / p31）。空数组 = 未见对应讲解（只存在于课件里）。",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["sessionIndex", "startSec"],
+              "properties": {
+                "sessionIndex": { "type": "integer", "minimum": 1, "description": "对应 source.sessions 下标 +1" },
+                "startSec": { "type": "number", "minimum": 0, "description": "**换算成秒**。绝不用容器时间戳推算" },
+                "startMmss": { "type": ["string", "null"], "pattern": "^[0-9]{1,2}:[0-9]{2}$" },
+                "endSec": { "type": "number", "minimum": 0, "description": "该页持续放映到何时（视频页尤其需要）" },
+                "isReplay": { "type": "boolean", "description": "同一节次内的重放" },
+                "timecodeSource": {
+                  "enum": ["platform-imageSeekTime-sec", "platform-createSec-ms", "decode-scene", "keyframe", "manual"],
+                  "description": "**保留时间码口径**，防止单位混淆：同一平台旧接口 `createSec` 是毫秒，`ai/ppt` 的 `imageSeekTime` 是**秒**（实测 max 2953/3210 对应时长 3308.6/3289.0）"
+                },
+                "rawTimecode": { "type": ["string", "null"], "description": "平台原始读数，如 \"2953\"" }
+              }
+            }
+          },
+
+          "title": { "type": ["string", "null"] },
+          "contentType": {
+            "enum": ["slide", "video", "activity", "desktop", "unknown"],
+            "description": "**video** = 该页是嵌入视频占位（L08 p13 从 12:51 播到 15:47，PDF 里紫色区域是未导出的视频）；**activity** = 课堂活动/练习页；**desktop** = 教师桌面或应用窗口截图，**不是课件页**"
+          },
+          "isPureImagePage": { "type": "boolean", "description": "纯图页：文本提取为空，必须以页面图像为准" },
+          "textExtractionIssue": { "type": ["string", "null"], "description": "如「文本顺序错乱：两方框标题与正文交错」" },
+          "duplicateOf": { "type": ["integer", "null"], "description": "去重后指向保留帧的 index" },
+          "ocrText": { "type": ["string", "null"], "description": "逐页 OCR 文本，供去重与检索" },
+
+          "footerUnit": { "type": ["string", "null"], "description": "所属单元 / 左上栏目条，如 \"KNOWLEDGE REPRESENTATION\"" },
+          "pageNoScope": {
+            "enum": ["section", "page", "none"],
+            "description": "页脚编号的作用域。**L08 实测是 `section`**：页脚是小节 / 版式编号，一个小节可跨多页（p26–p31 与 p33 都是 10；p8/p9/p11 都是 03；p17/p18 都是 06），因此**页脚重复是正常的**，不能当唯一页码用"
+          },
+          "pageNoExpected": { "type": ["string", "null"], "description": "该页所属小节的页脚编号，如 \"01\"、\"11\"。**不要假设它等于 pdfPage**" },
+          "pageNoFullOcr": { "type": ["string", "null"], "description": "整帧 OCR 的原始读数（字符串：可能含版式标注，如 \"实验心理学 11\"）" },
+          "pageNoFooterOcr": { "type": ["string", "null"], "description": "页脚裁切放大后的原始读数" },
+          "pageNoNormalized": { "type": ["string", "null"], "description": "归一化后的纯数字，供比较" },
+          "pageNoStatus": {
+            "enum": ["verified", "anomalous", "mismatch", "missing", "not-applicable"],
+            "description": "**verified** = 两路读数一致。**页脚不是唯一页码**：L08 实测 p26–p31 与 p33 页脚都是 10、p8/p9/p11 都是 03、p17/p18 都是 06，**这些全部正常，不构成异常**；**anomalous** = 两路一致但明显偏离相邻页序列（L08 p24 页脚 42，前后页是 08 与 09），按原样保留、不静默改名；**mismatch** = 两路读数不一致；**missing** = 无页脚数字（含底部为其他内容行）；**not-applicable** = 该页无页码体系"
+          },
+          "pageNoNote": { "type": ["string", "null"], "description": "anomalous / mismatch / missing 时必须写明原始读数与判断依据" }
+        }
+      }
+    },
+
+    "pdf": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": ["string", "null"] },
+        "pageCount": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": ["string", "null"] },
+        "author": { "type": ["string", "null"] },
+        "createdAt": { "type": ["string", "null"] },
+        "isSelection": { "type": "boolean", "description": "**true = 这份 PDF 是选页而非课件全部**。L08 的 S84 是选页：p35 之后课堂还放了两页（46:41 / 48:28），不在 S84 内" },
+        "textExtractionIssues": { "type": "array", "items": { "type": "string" } },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+
+    "sourceRegisterEntries": {
+      "type": "array",
+      "description": "需要写入目标库 Source Register 的行（由本 skill 生成，写入由 L2 负责）",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "source"],
+        "properties": {
+          "id": { "type": ["string", "null"], "description": "S## 形式；由目标库分配，**本 skill 不擅自编号**" },
+          "type": { "type": "string" },
+          "source": { "type": "string" },
+          "date": { "type": ["string", "null"], "description": "**材料接收日期**，与课堂日期区分" },
+          "status": { "type": ["string", "null"] },
+          "note": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "unarchivedMaterials": {
+      "type": "array",
+      "description": "课堂用到但**尚未归档**的材料。这类事实必须留痕，否则后续复核会以为课件是完整的。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["what", "evidence"],
+        "properties": {
+          "what": { "type": "string" },
+          "evidence": { "type": "string", "description": "依据：哪一节、哪个时间码、哪份材料" },
+          "impact": { "type": ["string", "null"], "description": "对结论的限制" }
+        }
+      }
+    },
+
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "逐条都是「需要人工判断」的事实，不是错误日志。必须清空才算干净交付。"
+    }
+  },
+
+  "allOf": [
+    {
+      "description": "要么有平台节次，要么有 PDF——不能两者皆空。",
+      "anyOf": [
+        { "properties": { "source": { "properties": { "sessions": { "minItems": 1 } } } } },
+        { "required": ["pdf"] }
+      ]
+    }
+  ]
+}
