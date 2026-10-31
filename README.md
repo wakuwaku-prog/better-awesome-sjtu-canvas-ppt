@@ -4,6 +4,15 @@
 
 一节完整的课在平台上通常被拆成**两个节次**（例如 `第1周 - 周四 第9节` 15:55、`第1周 - 周四 第10节` 16:50），**两节要一起抓、分别标注**。
 
+> **必经流程（触发本 skill 整理讲次时强制执行，不得跳步）**：
+> 登录 Canvas → 教师课件 PDF 归档 → PPT 轨画面核对（帧→PDF 页映射 + 课件外内容排查）
+> → 课堂字幕转写（平台 ASR 缺失时本地 whisper 兜底）→ 按库边界归档登记。
+> 详细步骤与实测命令见 `SKILL.md` 的「必经流程」一节。
+
+> **opencli 语法（2.0.2 实测）**：`opencli browser <session> <cmd>` 已失效，页面内 JS 用
+> `opencli browser --session <session> eval "<js>"`；新建标签页用
+> `opencli browser chrome call "tabs.create" '[{...}]'`（参数必须为 JSON 数组）。
+
 ## 两条证据链
 
 | | 路径 A：平台 PPT 轨 | 路径 B：从视频重建 |

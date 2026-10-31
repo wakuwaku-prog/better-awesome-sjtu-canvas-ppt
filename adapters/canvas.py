@@ -702,19 +702,33 @@ def transcribe_session(audio: Path, sdir: Path, label: str, args) -> dict | None
 # --------------------------------------------------------------------------
 
 def opencli_eval(session: str, js: str) -> str | None:
-    """调用 ``opencli browser <session> eval "<js>"``（命令形式来自 canvas-ppt SKILL.md）。
+    """调用 opencli 在页内执行 JS，取回 stdout。
 
-    **未在本机实测**：本环境没有已登录的 SJTU 会话，本函数只做命令拼装与失败提示。
+    语法随 opencli 版本变化（2026-10-31 实测 opencli 2.0.2）：
+
+    - 2.0.x：``opencli browser --session <session> eval "<js>"``（--session 在子命令前）；
+      ``opencli browser <session> eval`` 会报 ``unknown command``；
+    - 旧版：``opencli browser <session> eval "<js>"``。
+
+    两种形式依次尝试，兼容安装了任一版本的环境。
     """
     if not C.have("opencli"):
         print("未找到 opencli。请在已登录 SJTU 的浏览器里手工执行下面的 JS，并把输出存成文件。")
         return None
-    proc = C.run(["opencli", "browser", session, "eval", js], check=False, quiet=True)
-    if proc is None or proc.returncode != 0:
-        print(f"opencli 调用失败（rc={getattr(proc, 'returncode', '?')}）："
-              f"先确认 opencli doctor 全绿、浏览器已登录 SJTU。")
-        return None
-    return (proc.stdout or "").strip()
+    variants = (
+        ["opencli", "browser", "--session", session, "eval", js],  # opencli 2.0.x 实测可用
+        ["opencli", "browser", session, "eval", js],               # 旧版语法
+    )
+    last_rc = None
+    for cmd in variants:
+        proc = C.run(cmd, check=False, quiet=True)
+        if proc is not None and proc.returncode == 0:
+            return (proc.stdout or "").strip()
+        if proc is not None:
+            last_rc = proc.returncode
+    print(f"opencli 调用失败（rc={last_rc}）："
+          f"先确认 opencli doctor 全绿、浏览器已登录 SJTU（命令语法见 SKILL.md『2026-10-31 实测更新』）。")
+    return None
 
 
 def print_manual_js(js: str, hint: str) -> None:

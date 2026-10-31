@@ -10,6 +10,9 @@ description: >
   "交大视频PPT提取"、"导出PPT"、"下载课件"、"课堂实录"、"回放字幕"、
   "整理到 Obsidian"、"生成课堂笔记"、"课件逐页索引"、"知识库画像"、
   "/ivsModules/index"、"play-center"、sjtu.edu.cn / v.sjtu.edu.cn 回放页面时使用。
+  **本 skill 被触发整理任何讲次时，必经流程是强制的**：登录 Canvas → 教师课件 PDF
+  归档 → PPT 轨画面核对（帧→PDF 页映射 + 课件外内容排查）→ 课堂字幕转写 → 按库
+  边界归档登记；不得只整理课件而跳过回放核对与字幕转写。
   使用前提醒用户：1) 提前在浏览器登录 SJTU（oc.sjtu.edu.cn / v.sjtu.edu.cn）；
   2) opencli doctor 全绿，扩展未连接时先 opencli daemon restart。
 ---
@@ -44,6 +47,71 @@ description: >
 3. **本机依赖**：`ffmpeg` / `ffprobe`（必需）、`python` + `Pillow`（抽帧分组）、
    `faster-whisper`（转写）、`easyocr`（OCR，可选，仅第二条路径需要）。
 
+## 必经流程：登录 Canvas → 教师课件 PDF ＋ PPT 轨核对 ＋ 课堂字幕转写（每次整理讲次必须执行）
+
+**触发本 skill 整理任何讲次时，以下五步必须全部执行，不得跳步**——不得以「课件已逐页核对、够用了」为由省略回放画面核对或字幕转写；只有用户明确说不需要某一步时才可省，且省略原因必须写进 Source Register。课件主证据源是教师上传到 Canvas Files 的 PDF（教师可能只上传删减版，必须用回放帧排查课件外内容）；回放负责三件事——画面核对（帧→PDF 页映射）、**课堂字幕转写**、发现课件外内容。下述命令语法、接口字段与参数均为 2026-10-31 在 HLT3206G L07（课程 94079，teclId 9471，AI19–AI20）实测；与本文件旧版示例冲突时以本节为准。
+
+### 第 0 步：环境与命令语法（opencli 2.0.2 实测）
+
+旧版 `opencli browser <session> <cmd>` 在 2.0.2 下**不再可用**（unknown command）。实测可用的形式：
+
+```bash
+opencli doctor                                     # 全绿才继续
+opencli browser tab list  --session sjtu           # 列会话标签页
+opencli browser --session sjtu eval "<js>"         # 页面内 JS（get value 同形）
+opencli browser get value --session sjtu "#__pptDump"
+opencli browser bind --session sjtu                # 把当前 Chrome 标签页绑定为 sjtu 会话
+opencli browser chrome call "tabs.create" '[{"url":"https://oc.sjtu.edu.cn/courses/<ID>"}]'   # 原生新建标签页（args 必须是 JSON 数组）
+opencli browser chrome call "tabs.get" '[<tabId>]'
+```
+
+### 第 1 步：登录 Canvas 并绑定会话（必做）
+
+1. `tabs.create` 打开课程页；若跳到 jAccount 统一身份认证，**由用户在浏览器里完成登录**（密码/扫码，助手不碰凭据），然后 `tabs.get` 轮询确认回到课程页。
+2. `opencli browser bind --session sjtu` 接管当前标签页；`teclId` 从 `performance.getEntriesByType('resource')` 的 `/v1/teachingClass/<id>/t-1` 提取。
+3. 节次表照旧用 `subject_vod_list_new`；`records[].id` 即每节的 `courseId`（如 HLT3206G 2026-10-29 两节 = 209448 / 209745）。
+
+### 第 2 步：教师课件 PDF 归档（主证据源，必做，先于回放）
+
+```js
+// 列课程文件（一次找齐教师 PDF）
+fetch('/api/v1/courses/<COURSE_ID>/files?per_page=100&sort=created_at&order=desc&search_term=Lecture',
+      {credentials:'include'}).then(r=>r.json()).then(d=>JSON.stringify(d.map(f=>({id:f.id,name:f.display_name,size:f.size,mod:f.modified_at}))))
+// 单文件详情：display_name/size/url（url 形如 /files/<id>/download?download_frd=1，cookie 鉴权）
+```
+
+下载只能走浏览器：`eval` 里 `document.createElement('a')` + `a.href=<download url>` + `click()`，文件落到系统 Downloads，再由助手移动进库并 `sha256sum` 校验归档/下载副本一致。**不要**试图用 curl 直拉 download URL（无凭据），也**不要**把 9 MB 级文件转 base64 走 textarea。
+
+### 第 3 步：PPT 轨画面核对（帧→PDF 页映射，必做）
+
+- 探测 `getAiFunctionShow` 返回 `pptShow:1` 后，新接口响应是 `data.docList[]`，字段 `imageId / imageSeekTime（秒）/ imageUrl`（旧 `createSec/pptImgUrl` 字段已不存在；`adapters/canvas.py` 的 `find_snapshot_records/IMG_KEYS` 兼容两种）。
+- 导出仍走 textarea（`get value` 回读，~30 KB 无压力），帧直链是公开 S3 式 URL，可批量下载：
+
+```bash
+curl --config dl_conf.txt --parallel --parallel-max 8    # dl_conf.txt：url = …
+output = … 每帧两行
+```
+
+- 页码映射用 `scripts/map_frames_to_pdf.py`：JPEG 签名校验 + 16×16 aHash 对 `pdftoppm` 渲染的 PDF 页求最近页，自动折叠连续同页段时间线；**`dist≥40` 的未匹配帧必须人工目视**——课前签到桌面、动画/视频播放帧、以及**课件外内容**（教师补充页）都落在这里。实测 HLT3206G L07：203/203 帧签名通过，5 页课件外内容全部由未匹配帧目视确认（Nichols 1997 SNARE 实验、Kiss-shrink-run *Science* 2025 论文页、EV 论坛页、Emr Scholar 页、教师与 Schekman 合影页）。
+- 教师口头声明「上传 PDF 是删减版」时，未匹配帧核查是**唯一**能穷尽课件外内容的手段，结果必须写进 Source Register 与 L## 笔记。
+
+### 第 4 步：课堂字幕转写（必做；平台 ASR 缺失时走本地兜底）
+
+- 平台 AI 转写**可能未生成**：`getAiFunctionShow` 返回 `translateShow:0`，`/v1/course/ai/translate/<ID>` 与 `textSummary/<ID>` 均 `data:null`（HLT3206G 实测）。此时直接走本地转写，不要在平台侧反复试探。
+- 取流：`/v1/course_vod_urls_new?courseId=<ID>` 返回两路机位；机位名不固定（record2/3/5/6 都出现过），**用 `curl -sIL` 读 Content-Length 挑小文件**（实测 460 MB vs 840 MB）。前台 curl 下载（约 3 分钟/节）。
+- 转写：`ffmpeg -ac 1 -ar 16000 → scripts/transcribe_class.py "<16k.wav>" <outdir> <label> --model large-v3 --device cuda --chunk 600`（RTX 4060 约 5–8 分钟/节；产出 .md/.json/.srt）。
+- 引用纪律（与库约定一致）：**中文段识别质量差，只引用英文段可辨内容或画面确认内容**，逐条带时间戳；转写文件不进共享库，原始视频/音轨处理完即删。
+
+### 第 5 步：整理边界（必做，写死，避免临场发挥）
+
+- Source Register 新增一行 S##：帧数/签名通过率/映射方式/转写模型与段数/关键时间点/课件外内容清单/「原始媒体已删除、转写未归档」状态。
+- 正式笔记加「课堂转写要点」小节（不带时间码，时间码留 Source Register）；P## 加「回放核对」表。
+- 教师的课程事务口述（考试安排、作业上传）只登记为课程信息，不执行；课后闲聊与人名传闻不写入。
+
+以下「选择路径 / 路径 A / 路径 B / 关键坑位」各节是**必经流程第 2–4 步的机制细节**：第 3 步画面核对按平台有无 PPT 轨选路（路径 A 的帧即翻页截图；路径 B 走场景抽取后再做同样的帧→PDF 页映射与课件外内容排查），第 4 步字幕在路径 A/B 下共用 B7 的转写脚本。
+
+---
+
 ## 选择路径：先看平台有没有 PPT 轨
 
 **不要默认 PPT 轨一定存在。** 先探测：
@@ -60,7 +128,7 @@ opencli browser <session> eval "fetch('/jy-application-resourcemanage/v1/course/
 
 ---
 
-## 第 0 步（两条路径共用）：定位课程与节次
+## 路径机制：定位课程与节次（必经流程第 1 步的展开）
 
 如果用户已经打开回放页，直接 `opencli browser sjtu bind` 接管。
 
@@ -150,7 +218,7 @@ opencli browser sjtu get value "#__pptDataDump"    # 存成 ppt_L<N>.json
 python scripts/download_ppt.py ppt_L<N>.json <输出目录>
 ```
 
-`createSec` 是毫秒（`"343551"` = 5:43.551）→ `int(ms)//1000` 得到秒。
+`createSec` 是毫秒（`"343551"` = 5:43.551）→ `int(ms)//1000` 得到秒。**2026-10-31 更新**：新接口响应为 `data.docList[]`，字段 `imageSeekTime`（秒）/`imageUrl`/`imageId`，无 `createSec`；`adapters/canvas.py` 已兼容两种形状。
 `pptImgUrl` 是公开 S3 直链，**无需额外鉴权**；去掉 `:443` 端口后下载，失败再回退原 URL。
 
 ### A4. 换取视频直链（两条路径都需要）
@@ -425,6 +493,7 @@ AI 讲解（md 真源 + 单文件 HTML）与课后考题（对话卷子 / md 折
 | `ocr_slides.py` | EasyOCR 逐页文字 + 页脚页码初判（`_ocr.json` / `_ocr.md`） |
 | `read_slide_pageno.py` | 页脚条裁切 + 放大 + 数字白名单，专读课件页码 |
 | `dedupe_slides.py` | 按文本相似度合并动画帧，保留信息最全的一帧 |
+| `map_frames_to_pdf.py` | **帧→教师 PDF 页码映射**（JPEG 签名 + aHash + 时间线折叠 + 未匹配帧清单；2026-10-31 实测） |
 | `scene_times.py` | 输出场景切换时间码与分数（诊断用） |
 | `transcribe_class.py` | 分段转写 + 逐段判定 zh/en/mixed（`.md/.json/.srt`） |
 | `diarize_transcript.py` | WavLM 声纹嵌入 + 聚类，输出说话人版本 |

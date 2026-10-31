@@ -451,8 +451,9 @@ python build_manifest.py "<work>" [-o <out>] [--schema <path>] \
 
 - `chaoxing.py --live` 的平台响应解析：**未在本机实测**（没有已登录的学习通会话）。
   已实测的只有：路径白名单拒绝越界、限速器边界、离线清单解析、dry-run 编排。
-- `canvas.py --list` 的 `opencli browser <session> eval` 调用：命令形式取自
-  `better-awesome-sjtu-canvas-ppt/SKILL.md`，**未执行**（无已登录 SJTU 会话）。
+- `canvas.py --list` 的 opencli eval 调用：2026-10-31 已在 HLT3206G（course 94079）实测成功；
+  `opencli_eval` 现按 opencli 2.0.2 语法优先（`opencli browser --session <name> eval`）、旧语法回退，
+  命令口径见 SKILL.md「2026-10-31 实测更新」。
 - 路径 A 的真实下载（`download_ppt.py` 联网）**未执行**：本机无签名直链。
   已用 `--dry-run` + 手工构造的 `docList` 响应体验证了编排、分类、单位口径与凭据护栏。
 - 路径 B 的 `extract_ppt_scenes.py` / `ocr_slides.py` / `read_slide_pageno.py` /
