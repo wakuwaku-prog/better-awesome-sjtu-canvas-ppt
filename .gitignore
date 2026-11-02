@@ -20,3 +20,6 @@ slide_*.jpg
 *_kept.json
 scenes*/
 frames*/
+
+# 端到端试点产物：含未公开课件的页图与逐页标题，不随仓库分发
+docs/pilot/

@@ -115,7 +115,7 @@ python "$SKILL/scripts/build_vault_profile.py" "<vault root>" \
 | 心理与精神健康 | `\| ID \| 类型 Type \| 标题 / 文件名 \| 日期 \| 状态 Status \| 备注 \|` |
 | 有机化学 | 运行时读表头确认；**不假设** |
 
-- `sourceRegisterEntries[].id` 允许为 `null`——**`S##` 由目标库分配**。L08 pilot manifest 自带 S84/S85/S88/S89/S90，本层原样打印，**不改编号**。
+- `sourceRegisterEntries[].id` 允许为 `null`——**`S##` 由目标库分配**。L08 pilot manifest（2026-11 已移除）自带 S84/S85/S88/S89/S90，本层原样打印，**不改编号**。
 - **一节课拆成两段时分别登记**（一行一节，对应真实 `source.sessions[]`），这**不影响**它们合成同一篇 L 笔记。
 - 已删除的媒体只登记状态，**不建失效链接**。
 

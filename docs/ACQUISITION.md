@@ -459,5 +459,5 @@ python build_manifest.py "<work>" [-o <out>] [--schema <path>] \
 - 路径 B 的 `extract_ppt_scenes.py` / `ocr_slides.py` / `read_slide_pageno.py` /
   `transcribe_class.py` / `diarize_transcript.py` **未在本轮执行**（需要真实视频/音轨）。
   只调用了 `dedupe_slides.py` 的接口形状。
-- 基准 `docs/pilot/L08.manifest.json` 的 `pdf.createdAt` 是 `2026-10-12T21:29:00+08:00`，
+- 基准 manifest（原 `docs/pilot/L08.manifest.json`，2026-11 因含未公开课件的逐页标题已移除）的 `pdf.createdAt` 是 `2026-10-12T21:29:00+08:00`，
   而 PDF 元数据实际是 `21:29:24`（本适配器保留实际秒数）。**属基准的截断，非适配器偏差。**
