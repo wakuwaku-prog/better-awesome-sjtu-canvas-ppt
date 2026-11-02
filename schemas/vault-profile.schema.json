@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://local.dsh/lecture-to-obsidian/vault-profile.schema.json",
-  "title": "lecture-to-obsidian 知识库画像 vault profile",
+  "$id": "https://local.dsh/lecture-to-study/vault-profile.schema.json",
+  "title": "lecture-to-study 知识库画像 vault profile",
   "description": "目标 Obsidian 库的差异单点配置。由 scripts/build_vault_profile.py 从目标库 AGENTS.md 与目录实况生成，人工复核后冻结。冲突时以目标库 AGENTS.md 为准。",
   "type": "object",
   "additionalProperties": false,

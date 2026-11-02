@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""lecture-to-obsidian 采集层共用工具（adapters/ 内部模块，不是 CLI）。
+"""lecture-to-study 采集层共用工具（adapters/ 内部模块，不是 CLI）。
 
 只做四件事，供 canvas.py / chaoxing.py / pdf.py 复用，避免三份实现漂移：
 

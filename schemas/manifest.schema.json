@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://local.dsh/lecture-to-obsidian/manifest.schema.json",
-  "title": "lecture-to-obsidian 素材清单 manifest",
+  "$id": "https://local.dsh/lecture-to-study/manifest.schema.json",
+  "title": "lecture-to-study 素材清单 manifest",
   "description": "采集层（L0/L1）的唯一出口。下游所有层只读这份文件，不解析平台原始响应。v1 的五处设计全部由心理与精神健康 L08 的真实素材反推得出，不是先验假设：① 一节课可对应多个平台节次（L08 = 第15节 + 第16节）；② 同一页可在多个节次放映、也可在同一节次重放（p9 两节都放映；p29/p31 各重放一次）；③ 课件页脚是**小节编号而非唯一页码**，重复是正常的（p26–p31 与 p33 都是 10），只有明显偏离相邻序列才算异常（p24 = 42，前后页 08/09）；④ 平台课件轨是**屏幕快照轨**，含教师桌面与 PowerPoint 编辑窗口，不是干净原图（两节 131 条快照 vs 35 页）；⑤ 教师 PDF 可能是**选页**而非课件全部（S84 的 p35 之后课堂还放了两页）。",
   "type": "object",
   "additionalProperties": false,

@@ -5,7 +5,7 @@ description: >
   ① 提取课件、音轨、字幕（平台 PPT 轨 / 从视频重建两条证据链）；
   ② 把素材整理成可复习的笔记（知识库画像 → manifest 契约 → L## 课堂笔记 /
   P## 课件逐页索引 / V## 时间线 / Concept 概念页）。
-  AI 讲解与课后考题属后半程，见 skill `lecture-to-obsidian`。
+  AI 讲解与课后考题属后半程，见 skill `lecture-to-study`。
   当用户提到"交大Canvas PPT"、"上海交大课程回放"、"SJTU视频课件"、
   "交大视频PPT提取"、"导出PPT"、"下载课件"、"课堂实录"、"回放字幕"、
   "整理到 Obsidian"、"生成课堂笔记"、"课件逐页索引"、"知识库画像"、
@@ -21,7 +21,7 @@ description: >
 
 本 skill 负责**前半程**：从课堂实录回放提取**课件图片 / 音轨 / 字幕**（已有能力），
 再把素材整理成**能在 Obsidian 里复习的笔记**。后半程——AI 讲解（md 真源 + 单文件 HTML）、
-课后考题（三形态同源）、跨层质量门——在同机的 skill `lecture-to-obsidian`。
+课后考题（三形态同源）、跨层质量门——在同机的 skill `lecture-to-study`。
 
 ```
 平台回放 ──► adapters/ ──► raw/ ──► build_manifest.py ──► manifest.json   ← 冻结契约
@@ -33,7 +33,7 @@ description: >
 ```
 
 **两份契约**：`schemas/manifest.schema.json`（素材清单）、`schemas/vault-profile.schema.json`
-（知识库画像）。层间只通过这些文件传递，下游（含 `lecture-to-obsidian`）只认契约。
+（知识库画像）。层间只通过这些文件传递，下游（含 `lecture-to-study`）只认契约。
 
 一节完整的课在平台上通常被拆成**两个节次**（例如 `第1周 - 周四 第9节` 15:55、
 `第1周 - 周四 第10节` 16:50）。**两节要一起抓，并分别标注，不要合并成一份材料。**
@@ -480,7 +480,7 @@ python scripts/check_manifest.py <manifest.json>         # 素材清单自洽
 ### 下一步
 
 AI 讲解（md 真源 + 单文件 HTML）与课后考题（对话卷子 / md 折叠答案 / 题库 JSON v1）
-属 skill `lecture-to-obsidian`——它读本 skill 产出的 `manifest.json` 与
+属 skill `lecture-to-study`——它读本 skill 产出的 `manifest.json` 与
 `vault-profile.json`，不重复采集与笔记逻辑。
 
 ## 脚本清单
